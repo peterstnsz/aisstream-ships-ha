@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import ssl
 from datetime import datetime, timezone
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -62,7 +63,13 @@ class AisstreamShipsCoordinator:
 
         while True:
             try:
-                async with websockets.connect(AISSTREAM_WS) as ws:
+                # Build SSL context off the event loop to avoid blocking call
+                # (load_default_certs is a blocking I/O operation)
+                ssl_context = await self.hass.async_add_executor_job(
+                    ssl.create_default_context
+                )
+
+                async with websockets.connect(AISSTREAM_WS, ssl=ssl_context) as ws:
                     await ws.send(json.dumps({
                         "APIKey": api_key,
                         "BoundingBoxes": bbox,
