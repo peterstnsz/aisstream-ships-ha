@@ -3,13 +3,19 @@
     "step": {
       "user": {
         "title": "Aisstream Ships",
-        "description": "Connect to AISstream.io to track passenger vessels.",
+        "description": "Connect to AISstream.io to track vessels in an area or a specific fleet by MMSI.",
         "data": {
           "api_key": "AISstream API Key",
-          "max_ships": "Max ships to track (2–10)",
-          "min_length_m": "Min ship length in metres (0 = all, 150 = cruise only)"
+          "max_ships": "Max ships to display (2–20)",
+          "min_length_m": "Min ship length in metres (0 = all, 150 = large vessels only)",
+          "ship_type_preset": "Ship type filter (used in area mode)",
+          "mmsi_watchlist": "MMSI watchlist — comma-separated MMSIs (enables fleet mode)",
+          "stale_threshold_hours": "Hide ships not seen for N hours (0 = never hide)"
         }
       }
+    },
+    "error": {
+      "invalid_mmsi": "One or more MMSI values are invalid. Use comma-separated numbers only."
     }
   },
   "options": {
@@ -17,10 +23,16 @@
       "init": {
         "title": "Aisstream Ships Options",
         "data": {
-          "max_ships": "Max ships to track",
-          "min_length_m": "Min ship length (metres)"
+          "max_ships": "Max ships to display",
+          "min_length_m": "Min ship length (metres)",
+          "ship_type_preset": "Ship type filter (area mode)",
+          "mmsi_watchlist": "MMSI watchlist (fleet mode)",
+          "stale_threshold_hours": "Stale threshold (hours, 0 = never hide)"
         }
       }
+    },
+    "error": {
+      "invalid_mmsi": "One or more MMSI values are invalid. Use comma-separated numbers only."
     }
   }
 }

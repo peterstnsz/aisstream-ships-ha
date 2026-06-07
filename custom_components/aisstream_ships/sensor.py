@@ -6,7 +6,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DOMAIN, SIGNAL_UPDATE, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
-    DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH
+    DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH, STATUS_MAP,
 )
 
 
@@ -53,7 +53,7 @@ class _AisstreamBase(SensorEntity):
 
     def _ships(self) -> list:
         max_ships = self._entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)
-        return self._coordinator.get_passenger_ships(
+        return self._coordinator.get_ships(
             min_length=self._min_length, max_results=max_ships
         )
 
@@ -83,9 +83,11 @@ class AisstreamShipsHeaderSensor(_AisstreamBase):
     @property
     def native_value(self) -> str:
         n = len(self._ships())
+        fleet_mode = self._coordinator._fleet_mode()
         if n == 0:
-            return "No ships in area"
-        return f"Ships in area: {n}"
+            return "No ships tracked" if fleet_mode else "No ships in area"
+        label = "Fleet tracked" if fleet_mode else "Ships in area"
+        return f"{label}: {n}"
 
 
 class AisstreamShipSlotSensor(_AisstreamBase):
@@ -111,10 +113,13 @@ class AisstreamShipSlotSensor(_AisstreamBase):
         ship = self._ship()
         if not ship:
             return {}
+        raw_status = ship.get("status", -1)
         return {
             "destination": ship.get("destination") or "Unknown",
-            "status": ship.get("status", -1),
+            "status": STATUS_MAP.get(raw_status, "Unknown"),
+            "status_code": raw_status,
             "speed_knots": ship.get("speed", 0),
+            "true_heading": ship.get("true_heading"),
             "length_m": ship.get("length_m", 0),
             "mmsi": ship.get("mmsi"),
             "latitude": ship.get("lat"),
@@ -136,5 +141,5 @@ class AisstreamShipLineSensor(_AisstreamBase):
     def native_value(self) -> str:
         ships = self._ships()
         if self._slot > len(ships):
-            return "—"
+            return "\u2014"
         return self._coordinator.format_ship_line(ships[self._slot - 1])
