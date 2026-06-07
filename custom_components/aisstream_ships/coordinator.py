@@ -18,11 +18,9 @@ _LOGGER = logging.getLogger(__name__)
 RECONNECT_BASE = 30
 RECONNECT_MAX = 300
 RECONNECT_429 = 600
-# Connection must stay alive this long before backoff resets
-STABLE_THRESHOLD = 60  # seconds
-# WebSocket ping interval to keep the connection alive
-WS_PING_INTERVAL = 20  # seconds
-WS_PING_TIMEOUT = 10   # seconds
+STABLE_THRESHOLD = 60
+WS_PING_INTERVAL = 20
+WS_PING_TIMEOUT = 10
 
 
 class AisstreamShipsCoordinator:
@@ -54,7 +52,12 @@ class AisstreamShipsCoordinator:
         return SHIP_TYPE_PRESETS.get(preset, SHIP_TYPE_PRESETS[DEFAULT_SHIP_TYPE_PRESET])
 
     def _mmsi_watchlist(self) -> list[int]:
+        """Return MMSI list as integers (used internally for matching)."""
         return self._get(CONF_MMSI_LIST, [])
+
+    def _mmsi_watchlist_str(self) -> list[str]:
+        """Return MMSI list as strings (required by AISstream API)."""
+        return [str(m) for m in self._mmsi_watchlist()]
 
     def _fleet_mode(self) -> bool:
         return bool(self._mmsi_watchlist())
@@ -142,13 +145,15 @@ class AisstreamShipsCoordinator:
                         "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
                     }
                     if self._fleet_mode():
-                        subscription["FiltersShipMMSI"] = self._mmsi_watchlist()
+                        # AISstream requires MMSIs as strings, not integers
+                        subscription["FiltersShipMMSI"] = self._mmsi_watchlist_str()
 
                     await ws.send(json.dumps(subscription))
                     connected_at = asyncio.get_event_loop().time()
                     _LOGGER.info(
-                        "Aisstream Ships: connected (mode=%s)",
+                        "Aisstream Ships: connected (mode=%s, mmsi=%s)",
                         "fleet" if self._fleet_mode() else "area",
+                        self._mmsi_watchlist_str() if self._fleet_mode() else bbox,
                     )
 
                     async for raw in ws:
@@ -168,7 +173,6 @@ class AisstreamShipsCoordinator:
                     if connected_at else 0
                 )
 
-                # Reset backoff only if we were connected long enough to be stable
                 if uptime >= STABLE_THRESHOLD:
                     delay = RECONNECT_BASE
 
@@ -179,7 +183,6 @@ class AisstreamShipsCoordinator:
                         "backing off for %ss", delay,
                     )
                 elif "no close frame" in exc_str.lower():
-                    # Common server-side idle disconnect — not an error worth alarming on
                     _LOGGER.debug(
                         "Aisstream Ships: server closed connection without close frame "
                         "(uptime %.0fs) — retrying in %ss", uptime, delay,
