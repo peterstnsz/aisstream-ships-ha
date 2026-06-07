@@ -37,23 +37,28 @@ class AisstreamShipsCoordinator:
                 pass
             self._ws_task = None
 
+    def _get(self, key, default):
+        """Read from options first, fall back to data, then default."""
+        return self._entry.options.get(
+            key, self._entry.data.get(key, default)
+        )
+
     # ------------------------------------------------------------------
     # Ship retrieval helpers
     # ------------------------------------------------------------------
 
     def _active_ship_types(self) -> set:
-        preset = self._entry.data.get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)
+        preset = self._get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)
         return SHIP_TYPE_PRESETS.get(preset, SHIP_TYPE_PRESETS[DEFAULT_SHIP_TYPE_PRESET])
 
     def _mmsi_watchlist(self) -> list[int]:
-        return self._entry.data.get(CONF_MMSI_LIST, [])
+        return self._get(CONF_MMSI_LIST, [])
 
     def _fleet_mode(self) -> bool:
-        """Return True when the user has defined an MMSI watchlist."""
         return bool(self._mmsi_watchlist())
 
     def _is_stale(self, ship: dict) -> bool:
-        stale_hours = self._entry.data.get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)
+        stale_hours = self._get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)
         if stale_hours == 0:
             return False
         last_seen = ship.get("last_seen")
@@ -66,7 +71,6 @@ class AisstreamShipsCoordinator:
             return True
 
     def get_ships(self, min_length: int = 0, max_results: int = DEFAULT_MAX_SHIPS) -> list:
-        """Return ships to surface as sensors, honouring fleet vs area mode."""
         if self._fleet_mode():
             watchlist = set(self._mmsi_watchlist())
             ships = [
@@ -85,7 +89,6 @@ class AisstreamShipsCoordinator:
         ships.sort(key=lambda s: s.get("last_seen") or "", reverse=True)
         return ships[:max_results]
 
-    # Keep legacy name so existing callers (tests etc.) don't break
     def get_passenger_ships(self, min_length: int = 0, max_results: int = DEFAULT_MAX_SHIPS) -> list:
         return self.get_ships(min_length=min_length, max_results=max_results)
 
@@ -110,11 +113,10 @@ class AisstreamShipsCoordinator:
 
         api_key = self._entry.data[CONF_API_KEY]
 
-        # Fleet mode always uses worldwide bbox; area mode uses configured bbox
         if self._fleet_mode():
             bbox = WORLDWIDE_BBOX
         else:
-            bbox = self._entry.data.get(CONF_BOUNDING_BOX, DEFAULT_BBOX)
+            bbox = self._get(CONF_BOUNDING_BOX, DEFAULT_BBOX)
 
         while True:
             try:
@@ -146,7 +148,7 @@ class AisstreamShipsCoordinator:
                 return
             except Exception as exc:
                 _LOGGER.error(
-                    "Aisstream Ships: connection error: %s — retrying in %ss",
+                    "Aisstream Ships: connection error: %s \u2014 retrying in %ss",
                     exc, RECONNECT_DELAY
                 )
                 await asyncio.sleep(RECONNECT_DELAY)
@@ -184,10 +186,8 @@ class AisstreamShipsCoordinator:
             ship["lon"] = data.get("Longitude", 0.0)
             ship["status"] = data.get("NavigationalStatus", -1)
             raw_heading = data.get("TrueHeading")
-            # AIS value 511 means "not available"
             ship["true_heading"] = None if raw_heading in (511, None) else raw_heading
 
-        # Warn if a watchlisted MMSI hasn't been seen for a while
         if self._fleet_mode() and mmsi in set(self._mmsi_watchlist()):
             if self._is_stale(ship):
                 _LOGGER.warning(

@@ -58,6 +58,12 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         self._config_entry = config_entry
 
+    def _get(self, key, default):
+        """Read from options first, fall back to data, then default."""
+        return self._config_entry.options.get(
+            key, self._config_entry.data.get(key, default)
+        )
+
     async def async_step_init(self, user_input=None):
         errors = {}
         if user_input is not None:
@@ -70,24 +76,24 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
                 return self.async_create_entry(title="", data=user_input)
 
         # Re-serialise stored MMSI list back to a comma-separated string for the form
-        stored_mmsi = self._config_entry.data.get(CONF_MMSI_LIST, [])
+        stored_mmsi = self._get(CONF_MMSI_LIST, [])
         mmsi_default = ", ".join(str(m) for m in stored_mmsi)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Optional(CONF_MAX_SHIPS,
-                    default=self._config_entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)):
+                    default=self._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)):
                     vol.All(int, vol.Range(min=2, max=20)),
                 vol.Optional(CONF_MIN_LENGTH,
-                    default=self._config_entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)):
+                    default=self._get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)):
                     vol.All(int, vol.Range(min=0, max=500)),
                 vol.Optional(CONF_SHIP_TYPE_PRESET,
-                    default=self._config_entry.data.get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)):
+                    default=self._get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)):
                     vol.In(list(SHIP_TYPE_PRESETS.keys())),
                 vol.Optional(CONF_MMSI_LIST, default=mmsi_default): str,
                 vol.Optional(CONF_STALE_HOURS,
-                    default=self._config_entry.data.get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)):
+                    default=self._get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)):
                     vol.All(int, vol.Range(min=0, max=72)),
             }),
             errors=errors,

@@ -16,8 +16,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    max_ships = entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)
-    min_length = entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)
+    # Read from options first, fall back to data
+    max_ships = entry.options.get(CONF_MAX_SHIPS, entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))
+    min_length = entry.options.get(CONF_MIN_LENGTH, entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH))
 
     entities: list[SensorEntity] = [
         AisstreamShipCountSensor(coordinator, entry, min_length),
@@ -51,8 +52,11 @@ class _AisstreamBase(SensorEntity):
     def _handle_update(self) -> None:
         self.async_write_ha_state()
 
+    def _get(self, key, default):
+        return self._entry.options.get(key, self._entry.data.get(key, default))
+
     def _ships(self) -> list:
-        max_ships = self._entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)
+        max_ships = self._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)
         return self._coordinator.get_ships(
             min_length=self._min_length, max_results=max_ships
         )
