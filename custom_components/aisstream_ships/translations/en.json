@@ -6,15 +6,17 @@
         "description": "Connect to AISstream.io to track vessels in an area or a specific fleet by MMSI.",
         "data": {
           "api_key": "AISstream API Key",
-          "max_ships": "Max ships to display (2–20)",
-          "min_length_m": "Min ship length in metres (0 = all, 150 = large vessels only)",
+          "bounding_box_raw": "Bounding box — [[lat1,lon1],[lat2,lon2]] e.g. [[53.25,-3.20],[53.50,-2.85]]",
+          "max_ships": "Max ships to display (2\u201320)",
+          "min_length_m": "Min ship length in metres (0 = all sizes)",
           "ship_type_preset": "Ship type filter (used in area mode)",
-          "mmsi_watchlist": "MMSI watchlist — comma-separated MMSIs (enables fleet mode)",
+          "mmsi_watchlist": "MMSI watchlist \u2014 comma-separated MMSIs (enables fleet mode, ignores bbox)",
           "stale_threshold_hours": "Hide ships not seen for N hours (0 = never hide)"
         }
       }
     },
     "error": {
+      "invalid_bbox": "Invalid bounding box. Use format [[lat1,lon1],[lat2,lon2]]",
       "invalid_mmsi": "One or more MMSI values are invalid. Use comma-separated numbers only."
     }
   },
@@ -23,15 +25,17 @@
       "init": {
         "title": "Aisstream Ships Options",
         "data": {
+          "bounding_box_raw": "Bounding box — [[lat1,lon1],[lat2,lon2]]",
           "max_ships": "Max ships to display",
           "min_length_m": "Min ship length (metres)",
           "ship_type_preset": "Ship type filter (area mode)",
-          "mmsi_watchlist": "MMSI watchlist (fleet mode)",
+          "mmsi_watchlist": "MMSI watchlist (fleet mode, overrides bbox)",
           "stale_threshold_hours": "Stale threshold (hours, 0 = never hide)"
         }
       }
     },
     "error": {
+      "invalid_bbox": "Invalid bounding box. Use format [[lat1,lon1],[lat2,lon2]]",
       "invalid_mmsi": "One or more MMSI values are invalid. Use comma-separated numbers only."
     }
   }

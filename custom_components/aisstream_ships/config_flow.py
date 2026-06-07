@@ -1,20 +1,37 @@
+import json
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from .const import (
     DOMAIN, CONF_API_KEY, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
+    CONF_BOUNDING_BOX, CONF_BOUNDING_BOX_RAW,
     CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
     DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH, DEFAULT_SHIP_TYPE_PRESET,
-    DEFAULT_STALE_HOURS, SHIP_TYPE_PRESETS,
+    DEFAULT_STALE_HOURS, DEFAULT_BBOX_RAW, SHIP_TYPE_PRESETS,
 )
 
 
 def _parse_mmsi_list(raw: str) -> list[int]:
-    """Parse a comma-separated string of MMSI numbers into a list of ints."""
     if not raw or not raw.strip():
         return []
     parts = [p.strip() for p in raw.split(",") if p.strip()]
     return [int(p) for p in parts if p.isdigit()]
+
+
+def _parse_bbox(raw: str):
+    """Parse a bounding box string like [[lat1,lon1],[lat2,lon2]] into nested list."""
+    parsed = json.loads(raw.strip())
+    # Accept either [[lat,lon],[lat,lon]] or [[[lat,lon],[lat,lon]]]
+    if isinstance(parsed[0][0], list):
+        return parsed
+    return [parsed]
+
+
+def _bbox_to_str(bbox) -> str:
+    """Serialise stored bbox back to a compact string for the form."""
+    # Unwrap outer list if it's a single-box list of lists
+    inner = bbox[0] if isinstance(bbox[0][0], list) else bbox
+    return json.dumps(inner, separators=(",", ":"))
 
 
 class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -23,6 +40,11 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
+            try:
+                bbox_raw = user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)
+                user_input[CONF_BOUNDING_BOX] = _parse_bbox(bbox_raw)
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+                errors[CONF_BOUNDING_BOX_RAW] = "invalid_bbox"
             try:
                 mmsi_raw = user_input.get(CONF_MMSI_LIST, "")
                 user_input[CONF_MMSI_LIST] = _parse_mmsi_list(mmsi_raw)
@@ -35,6 +57,7 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): str,
+                vol.Optional(CONF_BOUNDING_BOX_RAW, default=DEFAULT_BBOX_RAW): str,
                 vol.Optional(CONF_MAX_SHIPS, default=DEFAULT_MAX_SHIPS):
                     vol.All(int, vol.Range(min=2, max=20)),
                 vol.Optional(CONF_MIN_LENGTH, default=DEFAULT_MIN_LENGTH):
@@ -59,7 +82,6 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
         self._config_entry = config_entry
 
     def _get(self, key, default):
-        """Read from options first, fall back to data, then default."""
         return self._config_entry.options.get(
             key, self._config_entry.data.get(key, default)
         )
@@ -68,6 +90,11 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         if user_input is not None:
             try:
+                bbox_raw = user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)
+                user_input[CONF_BOUNDING_BOX] = _parse_bbox(bbox_raw)
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+                errors[CONF_BOUNDING_BOX_RAW] = "invalid_bbox"
+            try:
                 mmsi_raw = user_input.get(CONF_MMSI_LIST, "")
                 user_input[CONF_MMSI_LIST] = _parse_mmsi_list(mmsi_raw)
             except ValueError:
@@ -75,13 +102,17 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
             if not errors:
                 return self.async_create_entry(title="", data=user_input)
 
-        # Re-serialise stored MMSI list back to a comma-separated string for the form
+        # Re-serialise stored bbox and MMSI list for the form
+        stored_bbox = self._get(CONF_BOUNDING_BOX, None)
+        bbox_default = _bbox_to_str(stored_bbox) if stored_bbox else DEFAULT_BBOX_RAW
+
         stored_mmsi = self._get(CONF_MMSI_LIST, [])
         mmsi_default = ", ".join(str(m) for m in stored_mmsi)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
+                vol.Optional(CONF_BOUNDING_BOX_RAW, default=bbox_default): str,
                 vol.Optional(CONF_MAX_SHIPS,
                     default=self._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)):
                     vol.All(int, vol.Range(min=2, max=20)),

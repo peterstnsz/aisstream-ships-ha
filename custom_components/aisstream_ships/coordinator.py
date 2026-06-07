@@ -7,9 +7,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from .const import (
     AISSTREAM_WS, SHIP_TYPE_PRESETS, STATUS_MAP, SIGNAL_UPDATE,
-    CONF_API_KEY, CONF_MAX_SHIPS, CONF_MIN_LENGTH, CONF_BOUNDING_BOX,
-    CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
-    DEFAULT_BBOX, DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH,
+    CONF_API_KEY, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
+    CONF_BOUNDING_BOX, CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
+    DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH,
     DEFAULT_SHIP_TYPE_PRESET, DEFAULT_STALE_HOURS, WORLDWIDE_BBOX,
 )
 
@@ -37,15 +37,11 @@ class AisstreamShipsCoordinator:
                 pass
             self._ws_task = None
 
-    def _get(self, key, default):
+    def _get(self, key, default=None):
         """Read from options first, fall back to data, then default."""
         return self._entry.options.get(
             key, self._entry.data.get(key, default)
         )
-
-    # ------------------------------------------------------------------
-    # Ship retrieval helpers
-    # ------------------------------------------------------------------
 
     def _active_ship_types(self) -> set:
         preset = self._get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)
@@ -100,10 +96,6 @@ class AisstreamShipsCoordinator:
         heading_str = f" hdg:{heading}\u00b0" if heading is not None else ""
         return f"{name} ({status} > {dest}){heading_str}"
 
-    # ------------------------------------------------------------------
-    # WebSocket stream
-    # ------------------------------------------------------------------
-
     async def _connect_stream(self) -> None:
         try:
             import websockets
@@ -116,7 +108,13 @@ class AisstreamShipsCoordinator:
         if self._fleet_mode():
             bbox = WORLDWIDE_BBOX
         else:
-            bbox = self._get(CONF_BOUNDING_BOX, DEFAULT_BBOX)
+            bbox = self._get(CONF_BOUNDING_BOX)
+            if not bbox:
+                _LOGGER.error(
+                    "Aisstream Ships: no bounding box configured — "
+                    "please set one in the integration options"
+                )
+                return
 
         while True:
             try:
@@ -134,8 +132,9 @@ class AisstreamShipsCoordinator:
 
                     await ws.send(json.dumps(subscription))
                     _LOGGER.info(
-                        "Aisstream Ships: connected (mode=%s)",
+                        "Aisstream Ships: connected (mode=%s, bbox=%s)",
                         "fleet" if self._fleet_mode() else "area",
+                        bbox,
                     )
 
                     async for raw in ws:
