@@ -15,9 +15,14 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-RECONNECT_BASE = 30       # initial retry delay in seconds
-RECONNECT_MAX = 300       # cap at 5 minutes
-RECONNECT_429 = 600       # 10 minutes after a 429
+RECONNECT_BASE = 30
+RECONNECT_MAX = 300
+RECONNECT_429 = 600
+# Connection must stay alive this long before backoff resets
+STABLE_THRESHOLD = 60  # seconds
+# WebSocket ping interval to keep the connection alive
+WS_PING_INTERVAL = 20  # seconds
+WS_PING_TIMEOUT = 10   # seconds
 
 
 class AisstreamShipsCoordinator:
@@ -120,11 +125,17 @@ class AisstreamShipsCoordinator:
         delay = RECONNECT_BASE
 
         while True:
+            connected_at = None
             try:
                 ssl_context = await self.hass.async_add_executor_job(
                     ssl.create_default_context
                 )
-                async with websockets.connect(AISSTREAM_WS, ssl=ssl_context) as ws:
+                async with websockets.connect(
+                    AISSTREAM_WS,
+                    ssl=ssl_context,
+                    ping_interval=WS_PING_INTERVAL,
+                    ping_timeout=WS_PING_TIMEOUT,
+                ) as ws:
                     subscription: dict = {
                         "APIKey": api_key,
                         "BoundingBoxes": bbox,
@@ -134,14 +145,11 @@ class AisstreamShipsCoordinator:
                         subscription["FiltersShipMMSI"] = self._mmsi_watchlist()
 
                     await ws.send(json.dumps(subscription))
+                    connected_at = asyncio.get_event_loop().time()
                     _LOGGER.info(
-                        "Aisstream Ships: connected (mode=%s, bbox=%s)",
+                        "Aisstream Ships: connected (mode=%s)",
                         "fleet" if self._fleet_mode() else "area",
-                        bbox,
                     )
-
-                    # Reset backoff on a successful connection
-                    delay = RECONNECT_BASE
 
                     async for raw in ws:
                         self._handle_message(json.loads(raw))
@@ -155,13 +163,26 @@ class AisstreamShipsCoordinator:
 
             except Exception as exc:
                 exc_str = str(exc)
+                uptime = (
+                    asyncio.get_event_loop().time() - connected_at
+                    if connected_at else 0
+                )
+
+                # Reset backoff only if we were connected long enough to be stable
+                if uptime >= STABLE_THRESHOLD:
+                    delay = RECONNECT_BASE
 
                 if "429" in exc_str:
                     delay = RECONNECT_429
                     _LOGGER.warning(
                         "Aisstream Ships: rate limited (HTTP 429) — "
-                        "backing off for %ss before retrying",
-                        delay,
+                        "backing off for %ss", delay,
+                    )
+                elif "no close frame" in exc_str.lower():
+                    # Common server-side idle disconnect — not an error worth alarming on
+                    _LOGGER.debug(
+                        "Aisstream Ships: server closed connection without close frame "
+                        "(uptime %.0fs) — retrying in %ss", uptime, delay,
                     )
                 else:
                     _LOGGER.warning(
@@ -171,7 +192,6 @@ class AisstreamShipsCoordinator:
 
                 await asyncio.sleep(delay)
 
-                # Exponential backoff for non-429 errors, capped at RECONNECT_MAX
                 if "429" not in exc_str:
                     delay = min(delay * 2, RECONNECT_MAX)
 
