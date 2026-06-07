@@ -15,7 +15,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-RECONNECT_DELAY = 30
+RECONNECT_BASE = 30       # initial retry delay in seconds
+RECONNECT_MAX = 300       # cap at 5 minutes
+RECONNECT_429 = 600       # 10 minutes after a 429
 
 
 class AisstreamShipsCoordinator:
@@ -38,7 +40,6 @@ class AisstreamShipsCoordinator:
             self._ws_task = None
 
     def _get(self, key, default=None):
-        """Read from options first, fall back to data, then default."""
         return self._entry.options.get(
             key, self._entry.data.get(key, default)
         )
@@ -116,6 +117,8 @@ class AisstreamShipsCoordinator:
                 )
                 return
 
+        delay = RECONNECT_BASE
+
         while True:
             try:
                 ssl_context = await self.hass.async_add_executor_job(
@@ -137,20 +140,40 @@ class AisstreamShipsCoordinator:
                         bbox,
                     )
 
+                    # Reset backoff on a successful connection
+                    delay = RECONNECT_BASE
+
                     async for raw in ws:
                         self._handle_message(json.loads(raw))
                         async_dispatcher_send(
                             self.hass,
                             f"{SIGNAL_UPDATE}_{self._entry.entry_id}"
                         )
+
             except asyncio.CancelledError:
                 return
+
             except Exception as exc:
-                _LOGGER.error(
-                    "Aisstream Ships: connection error: %s \u2014 retrying in %ss",
-                    exc, RECONNECT_DELAY
-                )
-                await asyncio.sleep(RECONNECT_DELAY)
+                exc_str = str(exc)
+
+                if "429" in exc_str:
+                    delay = RECONNECT_429
+                    _LOGGER.warning(
+                        "Aisstream Ships: rate limited (HTTP 429) — "
+                        "backing off for %ss before retrying",
+                        delay,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Aisstream Ships: connection error: %s — retrying in %ss",
+                        exc, delay,
+                    )
+
+                await asyncio.sleep(delay)
+
+                # Exponential backoff for non-429 errors, capped at RECONNECT_MAX
+                if "429" not in exc_str:
+                    delay = min(delay * 2, RECONNECT_MAX)
 
     def _handle_message(self, msg: dict) -> None:
         mmsi = msg.get("MetaData", {}).get("MMSI", 0)
