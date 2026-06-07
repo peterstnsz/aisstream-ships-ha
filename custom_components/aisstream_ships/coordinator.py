@@ -43,10 +43,9 @@ class AisstreamShipsCoordinator:
             self._ws_task = None
 
     def _get(self, key, default=None):
-        val = self._entry.options.get(
+        return self._entry.options.get(
             key, self._entry.data.get(key, default)
         )
-        return val
 
     def _active_ship_types(self) -> set:
         preset = self._get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)
@@ -213,7 +212,7 @@ class AisstreamShipsCoordinator:
 
                 await asyncio.sleep(delay)
 
-                if "429" not in exc_ss:
+                if "429" not in exc_str:
                     delay = min(delay * 2, RECONNECT_MAX)
 
     def _handle_message(self, msg: dict) -> None:
