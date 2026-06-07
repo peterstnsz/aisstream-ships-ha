@@ -10,7 +10,7 @@ from .const import (
     CONF_API_KEY, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
     CONF_BOUNDING_BOX, CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
     DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH,
-    DEFAULT_SHIP_TYPE_PRESET, DEFAULT_STALE_HOURS, FLEET_MODE_BBOX,
+    DEFAULT_SHIP_TYPE_PRESET, DEFAULT_STALE_HOURS, WORLDWIDE_BBOX,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -128,7 +128,9 @@ class AisstreamShipsCoordinator:
         api_key = self._entry.data[CONF_API_KEY]
 
         if self._fleet_mode():
-            bbox = FLEET_MODE_BBOX
+            # Worldwide bbox required — AISstream needs bbox to cover vessel position
+            # even when FiltersShipMMSI is set. With a small watchlist this is safe.
+            bbox = WORLDWIDE_BBOX
         else:
             bbox = self._get(CONF_BOUNDING_BOX)
             if not bbox:
@@ -158,6 +160,7 @@ class AisstreamShipsCoordinator:
                         "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
                     }
                     if self._fleet_mode():
+                        # Must be strings per AISstream API spec
                         subscription["FiltersShipMMSI"] = self._mmsi_watchlist_str()
 
                     await ws.send(json.dumps(subscription))
