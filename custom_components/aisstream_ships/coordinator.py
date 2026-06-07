@@ -43,22 +43,33 @@ class AisstreamShipsCoordinator:
             self._ws_task = None
 
     def _get(self, key, default=None):
-        return self._entry.options.get(
+        val = self._entry.options.get(
             key, self._entry.data.get(key, default)
         )
+        return val
 
     def _active_ship_types(self) -> set:
         preset = self._get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)
         return SHIP_TYPE_PRESETS.get(preset, SHIP_TYPE_PRESETS[DEFAULT_SHIP_TYPE_PRESET])
 
     def _mmsi_watchlist(self) -> list[int]:
-        return self._get(CONF_MMSI_LIST, [])
+        raw = self._get(CONF_MMSI_LIST, [])
+        if isinstance(raw, list):
+            return [int(m) for m in raw]
+        return []
 
     def _mmsi_watchlist_str(self) -> list[str]:
         return [str(m) for m in self._mmsi_watchlist()]
 
     def _fleet_mode(self) -> bool:
-        return bool(self._mmsi_watchlist())
+        watchlist = self._mmsi_watchlist()
+        _LOGGER.debug(
+            "Aisstream Ships: _fleet_mode check — options=%s data_mmsi=%s result=%s",
+            self._entry.options.get(CONF_MMSI_LIST),
+            self._entry.data.get(CONF_MMSI_LIST),
+            bool(watchlist),
+        )
+        return bool(watchlist)
 
     def _is_stale(self, ship: dict) -> bool:
         stale_hours = self._get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)
@@ -74,7 +85,12 @@ class AisstreamShipsCoordinator:
             return True
 
     def get_ships(self, min_length: int = 0, max_results: int = DEFAULT_MAX_SHIPS) -> list:
-        if self._fleet_mode():
+        fleet = self._fleet_mode()
+        _LOGGER.debug(
+            "Aisstream Ships: get_ships — fleet=%s ships_in_memory=%d",
+            fleet, len(self.ships)
+        )
+        if fleet:
             watchlist = set(self._mmsi_watchlist())
             ships = [
                 s for s in self.ships.values()
@@ -113,8 +129,6 @@ class AisstreamShipsCoordinator:
         api_key = self._entry.data[CONF_API_KEY]
 
         if self._fleet_mode():
-            # Use a minimal dummy bbox — FiltersShipMMSI works globally
-            # regardless of bbox, so we avoid the worldwide firehose
             bbox = FLEET_MODE_BBOX
         else:
             bbox = self._get(CONF_BOUNDING_BOX)
@@ -149,13 +163,16 @@ class AisstreamShipsCoordinator:
 
                     await ws.send(json.dumps(subscription))
                     connected_at = asyncio.get_event_loop().time()
-                    _LOGGER.info(
-                        "Aisstream Ships: connected (mode=%s, filter=%s)",
-                        "fleet",
-                        self._mmsi_watchlist_str(),
-                    ) if self._fleet_mode() else _LOGGER.info(
-                        "Aisstream Ships: connected (mode=area, bbox=%s)", bbox
-                    )
+
+                    if self._fleet_mode():
+                        _LOGGER.info(
+                            "Aisstream Ships: connected (mode=fleet, filter=%s)",
+                            self._mmsi_watchlist_str(),
+                        )
+                    else:
+                        _LOGGER.info(
+                            "Aisstream Ships: connected (mode=area, bbox=%s)", bbox
+                        )
 
                     async for raw in ws:
                         self._handle_message(json.loads(raw))
@@ -196,7 +213,7 @@ class AisstreamShipsCoordinator:
 
                 await asyncio.sleep(delay)
 
-                if "429" not in exc_str:
+                if "429" not in exc_ss:
                     delay = min(delay * 2, RECONNECT_MAX)
 
     def _handle_message(self, msg: dict) -> None:
@@ -233,6 +250,11 @@ class AisstreamShipsCoordinator:
             ship["status"] = data.get("NavigationalStatus", -1)
             raw_heading = data.get("TrueHeading")
             ship["true_heading"] = None if raw_heading in (511, None) else raw_heading
+
+        _LOGGER.debug(
+            "Aisstream Ships: message received — mmsi=%s type=%s name=%s",
+            mmsi, msg_type, self.ships[mmsi]["name"]
+        )
 
         if self._fleet_mode() and mmsi in set(self._mmsi_watchlist()):
             if self._is_stale(ship):
