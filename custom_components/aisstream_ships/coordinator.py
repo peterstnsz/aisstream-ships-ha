@@ -128,8 +128,6 @@ class AisstreamShipsCoordinator:
         api_key = self._entry.data[CONF_API_KEY]
 
         if self._fleet_mode():
-            # Worldwide bbox required — AISstream needs bbox to cover vessel position
-            # even when FiltersShipMMSI is set. With a small watchlist this is safe.
             bbox = WORLDWIDE_BBOX
         else:
             bbox = self._get(CONF_BOUNDING_BOX)
@@ -160,7 +158,6 @@ class AisstreamShipsCoordinator:
                         "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
                     }
                     if self._fleet_mode():
-                        # Must be strings per AISstream API spec
                         subscription["FiltersShipMMSI"] = self._mmsi_watchlist_str()
 
                     await ws.send(json.dumps(subscription))
@@ -219,7 +216,8 @@ class AisstreamShipsCoordinator:
                     delay = min(delay * 2, RECONNECT_MAX)
 
     def _handle_message(self, msg: dict) -> None:
-        mmsi = msg.get("MetaData", {}).get("MMSI", 0)
+        meta = msg.get("MetaData", {})
+        mmsi = meta.get("MMSI", 0)
         if not mmsi:
             return
         msg_type = msg.get("MessageType")
@@ -236,9 +234,16 @@ class AisstreamShipsCoordinator:
         ship = self.ships[mmsi]
         ship["last_seen"] = datetime.now(timezone.utc).isoformat()
 
+        # Populate name from MetaData on every message — available before ShipStaticData arrives
+        meta_name = (meta.get("ShipName") or "").strip()
+        if meta_name and meta_name not in ("Unknown", ""):
+            ship["name"] = meta_name
+
         if msg_type == "ShipStaticData":
             data = msg["Message"]["ShipStaticData"]
-            ship["name"] = (data.get("Name") or "Unknown").strip()
+            static_name = (data.get("Name") or "").strip()
+            if static_name and static_name not in ("Unknown", ""):
+                ship["name"] = static_name
             ship["ship_type"] = data.get("Type", 0)
             ship["destination"] = (data.get("Destination") or "").strip()
             dim = data.get("Dimension") or {}
