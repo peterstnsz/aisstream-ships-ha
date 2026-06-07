@@ -2,24 +2,32 @@
   "config": {
     "step": {
       "user": {
-        "title": "Aisstream Ships",
-        "description": "Connect to AISstream.io to track vessels in an area or a specific fleet by MMSI.",
+        "title": "Aisstream Ships — API Key",
+        "description": "Enter your AISstream.io API key. You can get one free at https://aisstream.io",
         "data": {
-          "api_key": "AISstream API Key",
-          "bounding_box_raw": "Bounding box — [[lat1,lon1],[lat2,lon2]]",
-          "max_ships": "Max vessels to display (2–20)",
-          "min_length_m": "Min ship length in metres (0 = all sizes)",
+          "api_key": "AISstream API Key"
+        }
+      },
+      "setup": {
+        "title": "Aisstream Ships — Tracking Options",
+        "description": "Configure how vessels are tracked. Enter MMSIs to track specific vessels worldwide, or leave blank and set a bounding box for area tracking.",
+        "data": {
+          "mmsi_watchlist": "MMSI watchlist (fleet mode)",
+          "bounding_box_raw": "Bounding box (area mode)",
           "ship_type_preset": "Ship type filter",
-          "mmsi_watchlist": "MMSI watchlist — comma-separated (enables fleet mode)",
-          "stale_threshold_hours": "Hide vessels not seen for N hours (0 = never hide)"
+          "min_length_m": "Min ship length in metres",
+          "max_ships": "Max vessels to display",
+          "stale_threshold_hours": "Hide vessels not seen for N hours"
         },
         "data_description": {
-          "mmsi_watchlist": "Leave blank for area mode. Enter MMSIs to track specific vessels worldwide.",
-          "bounding_box_raw": "Example: [[53.25,-3.20],[53.50,-2.85]]"
+          "mmsi_watchlist": "Comma-separated MMSIs e.g. 310865000, 311000986. Overrides bbox if set.",
+          "bounding_box_raw": "e.g. [[53.25,-3.20],[53.50,-2.85]] — ignored if MMSI watchlist is set",
+          "stale_threshold_hours": "Set to 0 to never hide vessels (recommended for fleet mode)"
         }
       }
     },
     "error": {
+      "api_key_required": "API key cannot be empty.",
       "invalid_bbox": "Invalid bounding box. Use format [[lat1,lon1],[lat2,lon2]]",
       "invalid_mmsi": "One or more MMSI values are invalid. Use comma-separated numbers only."
     }
@@ -28,7 +36,7 @@
     "step": {
       "init": {
         "title": "Step 1 — Tracking mode",
-        "description": "Enter comma-separated MMSIs to track specific vessels worldwide (fleet mode), or leave blank to track vessels in an area.",
+        "description": "Enter MMSIs to track specific vessels worldwide (fleet mode), or leave blank to track by area.",
         "data": {
           "mmsi_watchlist": "MMSI watchlist"
         },
@@ -38,27 +46,27 @@
       },
       "fleet_mode": {
         "title": "Step 2 — Fleet mode settings",
-        "description": "Tracking specific vessels worldwide. Bounding box and ship type filter are not used in fleet mode.",
+        "description": "Tracking specific vessels worldwide. Bounding box and ship type filter are not used.",
         "data": {
-          "max_ships": "Max vessels to display (2–20)",
+          "max_ships": "Max vessels to display",
           "stale_threshold_hours": "Hide vessels not seen for N hours (0 = never hide)"
         },
         "data_description": {
-          "stale_threshold_hours": "Set to 0 for vessels in areas with poor AIS coverage (e.g. Persian Gulf)"
+          "stale_threshold_hours": "Set to 0 for vessels in areas with poor AIS coverage"
         }
       },
       "area_mode": {
         "title": "Step 2 — Area mode settings",
         "description": "Tracking all matching vessels within a geographic bounding box.",
         "data": {
-          "bounding_box_raw": "Bounding box — [[lat1,lon1],[lat2,lon2]]",
+          "bounding_box_raw": "Bounding box",
           "ship_type_preset": "Ship type filter",
-          "min_length_m": "Min ship length in metres (0 = all sizes)",
-          "max_ships": "Max vessels to display (2–20)",
+          "min_length_m": "Min ship length in metres",
+          "max_ships": "Max vessels to display",
           "stale_threshold_hours": "Hide vessels not seen for N hours (0 = never hide)"
         },
         "data_description": {
-          "bounding_box_raw": "Example: [[53.25,-3.20],[53.50,-2.85]] for Liverpool/Mersey"
+          "bounding_box_raw": "e.g. [[53.25,-3.20],[53.50,-2.85]] for Liverpool/Mersey"
         }
       }
     },
