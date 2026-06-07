@@ -9,7 +9,6 @@ SHIP_TYPE_PRESETS = {
     "all": set(range(0, 100)),
 }
 
-# Legacy alias
 PASSENGER_TYPES = set(range(60, 70))
 
 # Human-readable AIS ship type labels
@@ -43,7 +42,16 @@ DEFAULT_MAX_SHIPS = 10
 DEFAULT_MIN_LENGTH = 0
 DEFAULT_SHIP_TYPE_PRESET = "passenger"
 DEFAULT_STALE_HOURS = 1
+
+# Minimal 1x1 degree dummy bbox used in fleet mode.
+# BoundingBoxes is a required field in the AISstream subscription,
+# but FiltersShipMMSI works globally regardless of bbox.
+# Sending a tiny box avoids the firehose of a worldwide subscription.
+FLEET_MODE_BBOX = [[[0, 0], [1, 1]]]
+
+# Kept for reference but no longer sent
 WORLDWIDE_BBOX = [[[-90, -180], [90, 180]]]
+
 DEFAULT_BBOX_RAW = "[[53.25,-3.20],[53.50,-2.85]]"
 
 STATUS_MAP = {

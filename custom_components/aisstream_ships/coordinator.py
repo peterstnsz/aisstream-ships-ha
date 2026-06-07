@@ -10,7 +10,7 @@ from .const import (
     CONF_API_KEY, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
     CONF_BOUNDING_BOX, CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
     DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH,
-    DEFAULT_SHIP_TYPE_PRESET, DEFAULT_STALE_HOURS, WORLDWIDE_BBOX,
+    DEFAULT_SHIP_TYPE_PRESET, DEFAULT_STALE_HOURS, FLEET_MODE_BBOX,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,11 +52,9 @@ class AisstreamShipsCoordinator:
         return SHIP_TYPE_PRESETS.get(preset, SHIP_TYPE_PRESETS[DEFAULT_SHIP_TYPE_PRESET])
 
     def _mmsi_watchlist(self) -> list[int]:
-        """Return MMSI list as integers (used internally for matching)."""
         return self._get(CONF_MMSI_LIST, [])
 
     def _mmsi_watchlist_str(self) -> list[str]:
-        """Return MMSI list as strings (required by AISstream API)."""
         return [str(m) for m in self._mmsi_watchlist()]
 
     def _fleet_mode(self) -> bool:
@@ -115,7 +113,9 @@ class AisstreamShipsCoordinator:
         api_key = self._entry.data[CONF_API_KEY]
 
         if self._fleet_mode():
-            bbox = WORLDWIDE_BBOX
+            # Use a minimal dummy bbox — FiltersShipMMSI works globally
+            # regardless of bbox, so we avoid the worldwide firehose
+            bbox = FLEET_MODE_BBOX
         else:
             bbox = self._get(CONF_BOUNDING_BOX)
             if not bbox:
@@ -145,15 +145,16 @@ class AisstreamShipsCoordinator:
                         "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
                     }
                     if self._fleet_mode():
-                        # AISstream requires MMSIs as strings, not integers
                         subscription["FiltersShipMMSI"] = self._mmsi_watchlist_str()
 
                     await ws.send(json.dumps(subscription))
                     connected_at = asyncio.get_event_loop().time()
                     _LOGGER.info(
-                        "Aisstream Ships: connected (mode=%s, mmsi=%s)",
-                        "fleet" if self._fleet_mode() else "area",
-                        self._mmsi_watchlist_str() if self._fleet_mode() else bbox,
+                        "Aisstream Ships: connected (mode=%s, filter=%s)",
+                        "fleet",
+                        self._mmsi_watchlist_str(),
+                    ) if self._fleet_mode() else _LOGGER.info(
+                        "Aisstream Ships: connected (mode=area, bbox=%s)", bbox
                     )
 
                     async for raw in ws:
