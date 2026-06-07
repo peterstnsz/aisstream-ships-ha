@@ -44,7 +44,7 @@ def _bbox_to_str(bbox) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Config flow — initial setup (API key only on first screen)
+# Config flow — initial setup
 # ---------------------------------------------------------------------------
 class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -73,11 +73,11 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_setup(self, user_input=None):
-        """Step 2: tracking options (shown after API key is accepted)."""
+        """Step 2: tracking options."""
         errors = {}
         if user_input is not None:
+            bbox_raw = user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)
             try:
-                bbox_raw = user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)
                 bbox = _parse_bbox(bbox_raw)
             except (ValueError, KeyError, TypeError, json.JSONDecodeError):
                 errors[CONF_BOUNDING_BOX_RAW] = "invalid_bbox"
@@ -90,11 +90,11 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_API_KEY: self._api_key,
                     CONF_BOUNDING_BOX: bbox,
                     CONF_BOUNDING_BOX_RAW: bbox_raw,
-                    CONF_MAX_SHIPS: user_input.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS),
-                    CONF_MIN_LENGTH: user_input.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH),
+                    CONF_MAX_SHIPS: int(user_input.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)),
+                    CONF_MIN_LENGTH: int(user_input.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)),
                     CONF_SHIP_TYPE_PRESET: user_input.get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET),
                     CONF_MMSI_LIST: mmsi_list,
-                    CONF_STALE_HOURS: user_input.get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS),
+                    CONF_STALE_HOURS: int(user_input.get(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)),
                 }
                 return self.async_create_entry(title="Aisstream Ships", data=data)
 
@@ -139,7 +139,7 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 # ---------------------------------------------------------------------------
-# Options flow — post-setup configuration changes
+# Options flow
 # NOTE: Do NOT define __init__ — HA provides self.config_entry automatically
 # ---------------------------------------------------------------------------
 class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
@@ -153,11 +153,11 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
         return {
             CONF_BOUNDING_BOX: partial.get(CONF_BOUNDING_BOX, self._current(CONF_BOUNDING_BOX, None)),
             CONF_BOUNDING_BOX_RAW: partial.get(CONF_BOUNDING_BOX_RAW, self._current(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)),
-            CONF_MAX_SHIPS: partial.get(CONF_MAX_SHIPS, self._current(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)),
-            CONF_MIN_LENGTH: partial.get(CONF_MIN_LENGTH, self._current(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)),
+            CONF_MAX_SHIPS: int(partial.get(CONF_MAX_SHIPS, self._current(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))),
+            CONF_MIN_LENGTH: int(partial.get(CONF_MIN_LENGTH, self._current(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH))),
             CONF_SHIP_TYPE_PRESET: partial.get(CONF_SHIP_TYPE_PRESET, self._current(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET)),
             CONF_MMSI_LIST: partial.get(CONF_MMSI_LIST, self._current(CONF_MMSI_LIST, [])),
-            CONF_STALE_HOURS: partial.get(CONF_STALE_HOURS, self._current(CONF_STALE_HOURS, DEFAULT_STALE_HOURS)),
+            CONF_STALE_HOURS: int(partial.get(CONF_STALE_HOURS, self._current(CONF_STALE_HOURS, DEFAULT_STALE_HOURS))),
         }
 
     async def async_step_init(self, user_input=None):
@@ -181,7 +181,7 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_fleet_mode(self, user_input=None):
-        """Step 2a: fleet mode — only max ships + stale threshold."""
+        """Step 2a: fleet mode — max ships + stale threshold only."""
         if user_input is not None:
             partial = {
                 CONF_MMSI_LIST: self._mmsi_list,
@@ -205,11 +205,11 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_area_mode(self, user_input=None):
-        """Step 2b: area mode — bbox + ship type + min length + max ships + stale."""
+        """Step 2b: area mode — all area options."""
         errors = {}
         if user_input is not None:
+            bbox_raw = user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)
             try:
-                bbox_raw = user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW)
                 bbox = _parse_bbox(bbox_raw)
             except (ValueError, KeyError, TypeError, json.JSONDecodeError):
                 errors[CONF_BOUNDING_BOX_RAW] = "invalid_bbox"
@@ -219,7 +219,7 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
                 partial = {
                     CONF_MMSI_LIST: [],
                     CONF_BOUNDING_BOX: bbox,
-                    CONF_BOUNDING_BOX_RAW: user_input.get(CONF_BOUNDING_BOX_RAW, DEFAULT_BBOX_RAW),
+                    CONF_BOUNDING_BOX_RAW: bbox_raw,
                     CONF_MAX_SHIPS: int(user_input.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)),
                     CONF_MIN_LENGTH: int(user_input.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)),
                     CONF_SHIP_TYPE_PRESET: user_input.get(CONF_SHIP_TYPE_PRESET, DEFAULT_SHIP_TYPE_PRESET),
