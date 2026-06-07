@@ -9,8 +9,26 @@ SHIP_TYPE_PRESETS = {
     "all": set(range(0, 100)),
 }
 
-# Legacy alias used by get_passenger_ships shim
+# Legacy alias
 PASSENGER_TYPES = set(range(60, 70))
+
+# Human-readable AIS ship type labels
+SHIP_TYPE_LABEL_MAP = {
+    **{c: "Passenger" for c in range(60, 70)},
+    **{c: "Cargo" for c in range(70, 80)},
+    **{c: "Tanker" for c in range(80, 90)},
+    **{c: "Fishing" for c in [30, 31, 32, 33, 34, 35]},
+    **{c: "Service" for c in range(50, 60)},
+    36: "Sailing", 37: "Sailing",
+    **{c: "High Speed" for c in range(40, 50)},
+    21: "SAR", 22: "SAR",
+    31: "Towing", 32: "Towing",
+    33: "Dredging", 34: "Diving",
+    35: "Military",
+    51: "Pilot", 52: "Rescue", 53: "Tug", 54: "Port Tender",
+    55: "Anti-pollution", 58: "Medical",
+    90: "Other", 91: "Other", 99: "Other",
+}
 
 CONF_API_KEY = "api_key"
 CONF_MAX_SHIPS = "max_ships"
@@ -25,10 +43,8 @@ DEFAULT_MAX_SHIPS = 10
 DEFAULT_MIN_LENGTH = 0
 DEFAULT_SHIP_TYPE_PRESET = "passenger"
 DEFAULT_STALE_HOURS = 1
-# Worldwide bbox used automatically in fleet/MMSI mode
 WORLDWIDE_BBOX = [[[-90, -180], [90, 180]]]
-# Placeholder shown in the setup form
-DEFAULT_BBOX_RAW = "[[53.25, -3.20], [53.50, -2.85]]"
+DEFAULT_BBOX_RAW = "[[53.25,-3.20],[53.50,-2.85]]"
 
 STATUS_MAP = {
     0: "Underway",

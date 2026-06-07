@@ -6,7 +6,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DOMAIN, SIGNAL_UPDATE, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
-    DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH, STATUS_MAP,
+    DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH, STATUS_MAP, SHIP_TYPE_LABEL_MAP,
 )
 
 
@@ -117,11 +117,13 @@ class AisstreamShipSlotSensor(_AisstreamBase):
         if not ship:
             return {}
         raw_status = ship.get("status", -1)
+        ship_type_code = ship.get("ship_type", 0)
         return {
             "destination": ship.get("destination") or "Unknown",
             "status": STATUS_MAP.get(raw_status, "Unknown"),
             "status_code": raw_status,
-            "ship_type": ship.get("ship_type", 0),
+            "ship_type": ship_type_code,
+            "ship_type_label": SHIP_TYPE_LABEL_MAP.get(ship_type_code, "Vessel"),
             "speed_knots": ship.get("speed", 0),
             "true_heading": ship.get("true_heading"),
             "length_m": ship.get("length_m", 0),
