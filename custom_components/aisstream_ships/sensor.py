@@ -16,8 +16,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    max_ships = entry.options.get(CONF_MAX_SHIPS, entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))
-    min_length = entry.options.get(CONF_MIN_LENGTH, entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH))
+    max_ships = int(entry.options.get(CONF_MAX_SHIPS, entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)))
+    min_length = int(entry.options.get(CONF_MIN_LENGTH, entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)))
 
     entities: list[SensorEntity] = [
         AisstreamShipCountSensor(coordinator, entry, min_length),
@@ -55,7 +55,7 @@ class _AisstreamBase(SensorEntity):
         return self._entry.options.get(key, self._entry.data.get(key, default))
 
     def _ships(self) -> list:
-        max_ships = self._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)
+        max_ships = int(self._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))
         return self._coordinator.get_ships(
             min_length=self._min_length, max_results=max_ships
         )
@@ -147,5 +147,5 @@ class AisstreamShipLineSensor(_AisstreamBase):
     def native_value(self) -> str:
         ships = self._ships()
         if self._slot > len(ships):
-            return "\u2014"
+            return "—"
         return self._coordinator.format_ship_line(ships[self._slot - 1])
