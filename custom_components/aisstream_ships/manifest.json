@@ -3,7 +3,7 @@
   "name": "Aisstream Ships",
   "version": "0.2.0-beta",
   "documentation": "https://github.com/peterstnsz/aisstream-ships-ha",
-  "requirements": ["websockets>=10.0"],
+  "requirements": ["websockets>=11.0,<14"],
   "iot_class": "cloud_push",
   "config_flow": true,
   "codeowners": ["@peterstnsz"]

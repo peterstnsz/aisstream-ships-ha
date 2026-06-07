@@ -11,6 +11,7 @@ from .const import (
     CONF_BOUNDING_BOX, CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
     DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH,
     DEFAULT_SHIP_TYPE_PRESET, DEFAULT_STALE_HOURS, WORLDWIDE_BBOX,
+    MAX_MMSI_WATCHLIST,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,10 +22,14 @@ RECONNECT_429 = 600
 STABLE_THRESHOLD = 60
 WS_PING_INTERVAL = 20
 WS_PING_TIMEOUT = 10
+SUBSCRIPTION_SEND_TIMEOUT = 2.5  # AISstream closes connection if not subscribed within 3s
+
+# Prune ships dict when it grows beyond this size to prevent unbounded memory use.
+_SHIPS_PRUNE_THRESHOLD = 2000
 
 
 class AisstreamShipsCoordinator:
-    def __init__(self, hass: HomeAssistant, entry):
+    def __init__(self, hass: HomeAssistant, entry) -> None:
         self.hass = hass
         self._entry = entry
         self.ships: dict = {}
@@ -54,7 +59,7 @@ class AisstreamShipsCoordinator:
     def _mmsi_watchlist(self) -> list[int]:
         raw = self._get(CONF_MMSI_LIST, [])
         if isinstance(raw, list):
-            return [int(m) for m in raw]
+            return [int(m) for m in raw][:MAX_MMSI_WATCHLIST]
         return []
 
     def _mmsi_watchlist_str(self) -> list[str]:
@@ -82,6 +87,19 @@ class AisstreamShipsCoordinator:
             return datetime.fromisoformat(last_seen) < cutoff
         except ValueError:
             return True
+
+    def _prune_stale_ships(self) -> None:
+        """Evict stale entries when the ships dict grows too large."""
+        if len(self.ships) < _SHIPS_PRUNE_THRESHOLD:
+            return
+        stale_keys = [mmsi for mmsi, ship in self.ships.items() if self._is_stale(ship)]
+        for mmsi in stale_keys:
+            del self.ships[mmsi]
+        if stale_keys:
+            _LOGGER.debug(
+                "Aisstream Ships: pruned %d stale ships (dict size was %d)",
+                len(stale_keys), len(stale_keys) + len(self.ships),
+            )
 
     def get_ships(self, min_length: int = 0, max_results: int = DEFAULT_MAX_SHIPS) -> list:
         fleet = self._fleet_mode()
@@ -160,8 +178,13 @@ class AisstreamShipsCoordinator:
                     if self._fleet_mode():
                         subscription["FiltersShipMMSI"] = self._mmsi_watchlist_str()
 
-                    await ws.send(json.dumps(subscription))
-                    connected_at = asyncio.get_event_loop().time()
+                    # AISstream closes the connection if no subscription is received
+                    # within 3 seconds of connecting — guard with a timeout.
+                    await asyncio.wait_for(
+                        ws.send(json.dumps(subscription)),
+                        timeout=SUBSCRIPTION_SEND_TIMEOUT,
+                    )
+                    connected_at = asyncio.get_running_loop().time()
 
                     if self._fleet_mode():
                         _LOGGER.info(
@@ -186,7 +209,7 @@ class AisstreamShipsCoordinator:
             except Exception as exc:
                 exc_str = str(exc)
                 uptime = (
-                    asyncio.get_event_loop().time() - connected_at
+                    asyncio.get_running_loop().time() - connected_at
                     if connected_at else 0
                 )
 
@@ -230,11 +253,15 @@ class AisstreamShipsCoordinator:
                 "true_heading": None,
                 "last_seen": None,
             }
+            # Prune stale ships periodically to keep memory bounded.
+            self._prune_stale_ships()
 
         ship = self.ships[mmsi]
         ship["last_seen"] = datetime.now(timezone.utc).isoformat()
 
-        # Populate name from MetaData on every message — available before ShipStaticData arrives
+        # Populate name from MetaData on every message — available before ShipStaticData arrives.
+        # Note: MetaData lat/lon keys are lowercase ("latitude", "longitude") per the API spec;
+        # MMSI and ShipName are PascalCase.
         meta_name = (meta.get("ShipName") or "").strip()
         if meta_name and meta_name not in ("Unknown", ""):
             ship["name"] = meta_name
@@ -262,10 +289,3 @@ class AisstreamShipsCoordinator:
             "Aisstream Ships: message received — mmsi=%s type=%s name=%s",
             mmsi, msg_type, self.ships[mmsi]["name"]
         )
-
-        if self._fleet_mode() and mmsi in set(self._mmsi_watchlist()):
-            if self._is_stale(ship):
-                _LOGGER.warning(
-                    "Aisstream Ships: MMSI %s has not been seen within the stale threshold",
-                    mmsi,
-                )

@@ -13,16 +13,32 @@ from .const import (
     CONF_SHIP_TYPE_PRESET, CONF_MMSI_LIST, CONF_STALE_HOURS,
     DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH, DEFAULT_SHIP_TYPE_PRESET,
     DEFAULT_STALE_HOURS, DEFAULT_BBOX_RAW, SHIP_TYPE_PRESETS,
+    MAX_MMSI_WATCHLIST,
 )
 
 
-def _parse_mmsi_list(raw) -> list[int]:
+def _parse_mmsi_list(raw) -> tuple[list[int], list[str]]:
+    """Parse a comma-separated MMSI string or list.
+
+    Returns (valid_mmsis, invalid_entries). Invalid entries are returned so
+    the caller can surface them as a validation error.
+    """
     if isinstance(raw, list):
-        return [int(m) for m in raw if str(m).strip().isdigit()]
-    if not raw or not str(raw).strip():
-        return []
-    parts = [p.strip() for p in str(raw).split(",") if p.strip()]
-    return [int(p) for p in parts if p.isdigit()]
+        candidates = [str(m).strip() for m in raw]
+    elif not raw or not str(raw).strip():
+        return [], []
+    else:
+        candidates = [p.strip() for p in str(raw).split(",") if p.strip()]
+
+    valid: list[int] = []
+    invalid: list[str] = []
+    for p in candidates:
+        if p.isdigit():
+            valid.append(int(p))
+        else:
+            invalid.append(p)
+
+    return valid, invalid
 
 
 def _mmsi_to_str(value) -> str:
@@ -32,10 +48,21 @@ def _mmsi_to_str(value) -> str:
 
 
 def _parse_bbox(raw: str):
+    """Parse and validate a bounding box JSON string.
+
+    Raises ValueError if coordinate values are out of the valid WGS-84 range.
+    """
     parsed = json.loads(raw.strip())
-    if isinstance(parsed[0][0], list):
-        return parsed
-    return [parsed]
+    bbox = parsed if isinstance(parsed[0][0], list) else [parsed]
+
+    for box in bbox:
+        (lat1, lon1), (lat2, lon2) = box[0], box[1]
+        if not (-90 <= lat1 <= 90 and -90 <= lat2 <= 90):
+            raise ValueError(f"Latitude out of range: {lat1}, {lat2}")
+        if not (-180 <= lon1 <= 180 and -180 <= lon2 <= 180):
+            raise ValueError(f"Longitude out of range: {lon1}, {lon2}")
+
+    return bbox
 
 
 def _bbox_to_str(bbox) -> str:
@@ -83,7 +110,11 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_BOUNDING_BOX_RAW] = "invalid_bbox"
                 bbox = None
 
-            mmsi_list = _parse_mmsi_list(user_input.get(CONF_MMSI_LIST, ""))
+            mmsi_list, invalid_mmsi = _parse_mmsi_list(user_input.get(CONF_MMSI_LIST, ""))
+            if invalid_mmsi:
+                errors[CONF_MMSI_LIST] = "invalid_mmsi"
+            elif len(mmsi_list) > MAX_MMSI_WATCHLIST:
+                errors[CONF_MMSI_LIST] = "mmsi_limit_exceeded"
 
             if not errors:
                 data = {
@@ -143,6 +174,9 @@ class AisstreamShipsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 # NOTE: Do NOT define __init__ — HA provides self.config_entry automatically
 # ---------------------------------------------------------------------------
 class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
+    # Default set at class level to guard against any edge case where
+    # async_step_fleet_mode is reached without async_step_init running first.
+    _mmsi_list: list[int] = []
 
     def _current(self, key, default):
         return self.config_entry.options.get(
@@ -162,12 +196,19 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         """Step 1: MMSI — routes to fleet_mode or area_mode."""
+        errors = {}
         if user_input is not None:
-            self._mmsi_list = _parse_mmsi_list(user_input.get(CONF_MMSI_LIST, ""))
-            if self._mmsi_list:
-                return await self.async_step_fleet_mode()
+            mmsi_list, invalid_mmsi = _parse_mmsi_list(user_input.get(CONF_MMSI_LIST, ""))
+            if invalid_mmsi:
+                errors[CONF_MMSI_LIST] = "invalid_mmsi"
+            elif len(mmsi_list) > MAX_MMSI_WATCHLIST:
+                errors[CONF_MMSI_LIST] = "mmsi_limit_exceeded"
             else:
-                return await self.async_step_area_mode()
+                self._mmsi_list = mmsi_list
+                if self._mmsi_list:
+                    return await self.async_step_fleet_mode()
+                else:
+                    return await self.async_step_area_mode()
 
         mmsi_default = _mmsi_to_str(self._current(CONF_MMSI_LIST, []))
         return self.async_show_form(
@@ -178,6 +219,7 @@ class AisstreamShipsOptionsFlow(config_entries.OptionsFlow):
                     description={"suggested_value": mmsi_default},
                 ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
             }),
+            errors=errors,
         )
 
     async def async_step_fleet_mode(self, user_input=None):

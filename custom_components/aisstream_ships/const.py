@@ -9,17 +9,17 @@ SHIP_TYPE_PRESETS = {
     "all": set(range(0, 100)),
 }
 
-PASSENGER_TYPES = set(range(60, 70))
-
-# Human-readable AIS ship type labels
+# Human-readable AIS ship type labels.
+# Note: codes 31-35 must NOT appear in the Fishing block; they are defined
+# individually below as Towing/Dredging/Diving/Military per the AIS spec.
 SHIP_TYPE_LABEL_MAP = {
+    30: "Fishing",
     **{c: "Passenger" for c in range(60, 70)},
     **{c: "Cargo" for c in range(70, 80)},
     **{c: "Tanker" for c in range(80, 90)},
-    **{c: "Fishing" for c in [30, 31, 32, 33, 34, 35]},
     **{c: "Service" for c in range(50, 60)},
-    36: "Sailing", 37: "Sailing",
     **{c: "High Speed" for c in range(40, 50)},
+    36: "Sailing", 37: "Sailing",
     21: "SAR", 22: "SAR",
     31: "Towing", 32: "Towing",
     33: "Dredging", 34: "Diving",
@@ -43,6 +43,9 @@ DEFAULT_MIN_LENGTH = 0
 DEFAULT_SHIP_TYPE_PRESET = "passenger"
 DEFAULT_STALE_HOURS = 1
 
+# Maximum number of MMSIs the AISstream API accepts in FiltersShipMMSI.
+MAX_MMSI_WATCHLIST = 50
+
 # Worldwide bbox used in fleet mode.
 # AISstream requires BoundingBoxes to cover the vessel's actual position
 # even when FiltersShipMMSI is set. The MMSI filter itself limits delivery
@@ -51,6 +54,8 @@ WORLDWIDE_BBOX = [[[-90, -180], [90, 180]]]
 
 DEFAULT_BBOX_RAW = "[[53.25,-3.20],[53.50,-2.85]]"
 
+# AIS navigational status codes (ITU-R M.1371).
+# Codes 9-14 are valid values that AISstream can return.
 STATUS_MAP = {
     0: "Underway",
     1: "Anchored",
@@ -61,6 +66,12 @@ STATUS_MAP = {
     6: "Aground",
     7: "Engaged in fishing",
     8: "Sailing",
+    9: "Reserved (HSC)",
+    10: "Reserved (WIG)",
+    11: "Towing astern",
+    12: "Pushing ahead",
+    13: "Reserved",
+    14: "AIS-SART active",
     15: "Not defined",
     -1: "Unknown",
 }

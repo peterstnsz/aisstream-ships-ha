@@ -8,6 +8,7 @@ from .const import (
     DOMAIN, SIGNAL_UPDATE, CONF_MAX_SHIPS, CONF_MIN_LENGTH,
     DEFAULT_MAX_SHIPS, DEFAULT_MIN_LENGTH, STATUS_MAP, SHIP_TYPE_LABEL_MAP,
 )
+from .coordinator import AisstreamShipsCoordinator
 
 
 async def async_setup_entry(
@@ -15,7 +16,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: AisstreamShipsCoordinator = hass.data[DOMAIN][entry.entry_id]
     max_ships = int(entry.options.get(CONF_MAX_SHIPS, entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS)))
     min_length = int(entry.options.get(CONF_MIN_LENGTH, entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH)))
 
@@ -32,8 +33,15 @@ async def async_setup_entry(
 
 class _AisstreamBase(SensorEntity):
     _attr_should_poll = False
+    # Cached ship list, refreshed on each dispatcher update.
+    _cached_ships: list | None = None
 
-    def __init__(self, coordinator, entry, min_length: int) -> None:
+    def __init__(
+        self,
+        coordinator: AisstreamShipsCoordinator,
+        entry: ConfigEntry,
+        min_length: int,
+    ) -> None:
         self._coordinator = coordinator
         self._entry = entry
         self._min_length = min_length
@@ -49,23 +57,25 @@ class _AisstreamBase(SensorEntity):
 
     @callback
     def _handle_update(self) -> None:
+        # Invalidate the cache so all sensors on the next read get a fresh
+        # sorted list without redundant per-sensor sort calls.
+        self._cached_ships = None
         self.async_write_ha_state()
 
-    def _get(self, key, default):
-        return self._entry.options.get(key, self._entry.data.get(key, default))
-
     def _ships(self) -> list:
-        max_ships = int(self._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))
-        return self._coordinator.get_ships(
-            min_length=self._min_length, max_results=max_ships
-        )
+        if self._cached_ships is None:
+            max_ships = int(self._coordinator._get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))
+            self._cached_ships = self._coordinator.get_ships(
+                min_length=self._min_length, max_results=max_ships
+            )
+        return self._cached_ships
 
 
 class AisstreamShipCountSensor(_AisstreamBase):
     _attr_icon = "mdi:ferry"
     _attr_native_unit_of_measurement = "vessels"
 
-    def __init__(self, coordinator, entry, min_length: int) -> None:
+    def __init__(self, coordinator: AisstreamShipsCoordinator, entry: ConfigEntry, min_length: int) -> None:
         super().__init__(coordinator, entry, min_length)
         self._attr_unique_id = f"{entry.entry_id}_count"
         self._attr_name = "Aisstream Ship Count"
@@ -78,7 +88,7 @@ class AisstreamShipCountSensor(_AisstreamBase):
 class AisstreamShipsHeaderSensor(_AisstreamBase):
     _attr_icon = "mdi:ferry"
 
-    def __init__(self, coordinator, entry, min_length: int) -> None:
+    def __init__(self, coordinator: AisstreamShipsCoordinator, entry: ConfigEntry, min_length: int) -> None:
         super().__init__(coordinator, entry, min_length)
         self._attr_unique_id = f"{entry.entry_id}_header"
         self._attr_name = "Aisstream Ships Header"
@@ -96,7 +106,7 @@ class AisstreamShipsHeaderSensor(_AisstreamBase):
 class AisstreamShipSlotSensor(_AisstreamBase):
     _attr_icon = "mdi:ship-wheel"
 
-    def __init__(self, coordinator, entry, slot: int, min_length: int) -> None:
+    def __init__(self, coordinator: AisstreamShipsCoordinator, entry: ConfigEntry, slot: int, min_length: int) -> None:
         super().__init__(coordinator, entry, min_length)
         self._slot = slot
         self._attr_unique_id = f"{entry.entry_id}_ship_{slot}"
@@ -137,7 +147,7 @@ class AisstreamShipSlotSensor(_AisstreamBase):
 class AisstreamShipLineSensor(_AisstreamBase):
     _attr_icon = "mdi:text-short"
 
-    def __init__(self, coordinator, entry, slot: int, min_length: int) -> None:
+    def __init__(self, coordinator: AisstreamShipsCoordinator, entry: ConfigEntry, slot: int, min_length: int) -> None:
         super().__init__(coordinator, entry, min_length)
         self._slot = slot
         self._attr_unique_id = f"{entry.entry_id}_line_{slot}"
@@ -147,5 +157,5 @@ class AisstreamShipLineSensor(_AisstreamBase):
     def native_value(self) -> str:
         ships = self._ships()
         if self._slot > len(ships):
-            return "—"
+            return "\u2014"
         return self._coordinator.format_ship_line(ships[self._slot - 1])
