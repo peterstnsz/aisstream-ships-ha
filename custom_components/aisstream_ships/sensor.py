@@ -16,7 +16,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    # Read from options first, fall back to data
     max_ships = entry.options.get(CONF_MAX_SHIPS, entry.data.get(CONF_MAX_SHIPS, DEFAULT_MAX_SHIPS))
     min_length = entry.options.get(CONF_MIN_LENGTH, entry.data.get(CONF_MIN_LENGTH, DEFAULT_MIN_LENGTH))
 
@@ -122,6 +121,7 @@ class AisstreamShipSlotSensor(_AisstreamBase):
             "destination": ship.get("destination") or "Unknown",
             "status": STATUS_MAP.get(raw_status, "Unknown"),
             "status_code": raw_status,
+            "ship_type": ship.get("ship_type", 0),
             "speed_knots": ship.get("speed", 0),
             "true_heading": ship.get("true_heading"),
             "length_m": ship.get("length_m", 0),
